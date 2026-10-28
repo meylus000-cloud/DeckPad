@@ -124,18 +124,30 @@ namespace DeckPad
 
         static void Tap(List<ushort> mods, ushort key)
         {
-            var list = new List<INPUT>();
-            foreach (var m in mods) list.Add(Kb(m, 0, IsExtended(m) ? KEYEVENTF_EXTENDEDKEY : 0));
-            if (key != 0)
-            {
-                uint ext = IsExtended(key) ? KEYEVENTF_EXTENDEDKEY : 0;
-                list.Add(Kb(key, 0, ext));
-                list.Add(Kb(key, 0, ext | KEYEVENTF_KEYUP));
-            }
-            for (int i = mods.Count - 1; i >= 0; i--)
-                list.Add(Kb(mods[i], 0, KEYEVENTF_KEYUP | (IsExtended(mods[i]) ? KEYEVENTF_EXTENDEDKEY : 0)));
-            Send(list);
+            // Press modifiers and the key, hold briefly (some apps poll and miss
+            // instant taps), then release. Real scan codes are included so apps
+            // that read them (hotkey hooks) see a normal keystroke.
+            var down = new List<INPUT>();
+            foreach (var m in mods) down.Add(Key(m, 0));
+            if (key != 0) down.Add(Key(key, 0));
+            Send(down);
+            System.Threading.Thread.Sleep(70);
+
+            var up = new List<INPUT>();
+            if (key != 0) up.Add(Key(key, KEYEVENTF_KEYUP));
+            for (int i = mods.Count - 1; i >= 0; i--) up.Add(Key(mods[i], KEYEVENTF_KEYUP));
+            Send(up);
         }
+
+        static INPUT Key(ushort vk, uint flags)
+        {
+            if (IsExtended(vk)) flags |= KEYEVENTF_EXTENDEDKEY;
+            ushort scan = (ushort)MapVirtualKey(vk, 0);
+            return Kb(vk, scan, flags);
+        }
+
+        [DllImport("user32.dll")]
+        static extern uint MapVirtualKey(uint uCode, uint uMapType);
 
         static void TypeText(string text)
         {
